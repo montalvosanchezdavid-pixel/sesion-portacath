@@ -1,0 +1,1006 @@
+<title>Port-a-cath infectado</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700;12..96,800&family=IBM+Plex+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+/* Layout: repositorio clínico — barra superior + árbol de archivos lateral como índice + panel de diapositivas + grafo de commits como progreso.
+   Tema único oscuro a propósito (proyector, mundo de editor de código). */
+:root{
+  color-scheme:dark;
+  --bg:#0a1013; --panel:#0f181c; --panel2:#152227; --line:#22343a; --line2:#2d4549;
+  --fg:#dfe9e6; --muted:#8aa39d; --dim:#5f7772;
+  --accent:#4fd1b5; --accent-ink:#06231d;
+  --amber:#f2b84b; --red:#ff6b6b; --violet:#a78bfa; --blue:#6cb6ff;
+  --skin:#e7b49a; --fat:#f1d7a8; --ti:#9fb2b8;
+  --f-display:"Bricolage Grotesque", "Segoe UI", system-ui, sans-serif;
+  --f-body:"IBM Plex Sans", "Segoe UI", system-ui, sans-serif;
+  --f-mono:"JetBrains Mono", Consolas, ui-monospace, monospace;
+}
+*{box-sizing:border-box}
+html,body{height:100%}
+body{margin:0;background:var(--bg);color:var(--fg);font-family:var(--f-body);font-size:16px;line-height:1.5;overflow:hidden}
+body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset-top,0px);z-index:10;background:var(--panel)}
+button{font:inherit;color:inherit}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.mono{font-family:var(--f-mono)}
+
+.app{display:grid;grid-template-rows:auto 1fr auto;height:100%}
+/* ---------- top bar ---------- */
+.top{background:var(--panel);border-bottom:1px solid var(--line);padding-block:10px 0;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+.repo{display:flex;align-items:center;gap:10px;flex-wrap:wrap;font-family:var(--f-mono);font-size:14px}
+.repo svg{flex:none}
+.repo b{color:var(--accent);font-weight:600}
+.pill{border:1px solid var(--line2);border-radius:99px;padding:1px 9px;font-size:12px;color:var(--muted)}
+.repo .sp{flex:1}
+.ctl{display:flex;gap:6px}
+.ctl button{background:var(--panel2);border:1px solid var(--line2);border-radius:6px;padding:4px 10px;cursor:pointer;font-family:var(--f-mono);font-size:13px}
+.ctl button:hover{border-color:var(--accent)}
+.tabs{display:flex;gap:4px;margin-top:8px;overflow-x:auto;scrollbar-width:none}
+.tabs button{background:none;border:0;border-bottom:2px solid transparent;padding:8px 12px;cursor:pointer;color:var(--muted);font-size:14px;white-space:nowrap;display:flex;gap:7px;align-items:center}
+.tabs button.on{color:var(--fg);border-bottom-color:var(--amber)}
+.tabs .n{background:var(--panel2);border-radius:99px;padding:0 7px;font-size:12px}
+
+/* ---------- body ---------- */
+.main{display:grid;grid-template-columns:250px 1fr;min-height:0}
+.tree{border-right:1px solid var(--line);padding:14px 10px;overflow-y:auto;font-family:var(--f-mono);font-size:13px}
+.tree h4{margin:14px 8px 6px;font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--dim);font-weight:600}
+.tree button{display:flex;gap:8px;align-items:center;width:100%;text-align:left;background:none;border:0;padding:6px 8px;border-radius:6px;cursor:pointer;color:var(--muted)}
+.tree button:hover{background:var(--panel2)}
+.tree button.on{background:var(--panel2);color:var(--fg)}
+.tree button.on .ic{color:var(--accent)}
+.tree .ic{width:14px;flex:none;color:var(--dim)}
+
+.stage{position:relative;min-width:0;overflow:hidden}
+.slide{position:absolute;inset:0;overflow-y:auto;padding-block:clamp(20px,4vh,48px);padding-left:max(16px,env(safe-area-inset-left,0px),4vw);padding-right:max(16px,env(safe-area-inset-right,0px),4vw);visibility:hidden;opacity:0;transform:translateX(30px);transition:opacity .45s ease,transform .45s ease,visibility 0s .45s}
+.slide.active{visibility:visible;opacity:1;transform:none;transition:opacity .45s ease,transform .45s ease}
+.slide.prev{transform:translateX(-30px)}
+.inner{max-width:1200px;margin:0 auto}
+
+.crumb{font-family:var(--f-mono);font-size:13px;color:var(--muted);display:flex;gap:8px;align-items:center;margin-bottom:14px;flex-wrap:wrap}
+.crumb b{color:var(--fg);font-weight:600}
+h1,h2,h3{font-family:var(--f-display);text-wrap:balance;margin:0}
+h2{font-size:clamp(28px,3.6vw,48px);line-height:1.05;font-weight:800;letter-spacing:-.02em}
+h3{font-size:20px;font-weight:700}
+.lead{color:var(--muted);font-size:clamp(16px,1.35vw,19px);max-width:62ch;margin:12px 0 0}
+.eyebrow{font-family:var(--f-mono);font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:var(--accent)}
+
+.grid2{display:grid;grid-template-columns:1.25fr 1fr;gap:clamp(16px,3vw,40px);align-items:center;margin-top:24px}
+.grid2 > *{min-width:0}
+.box{background:var(--panel);border:1px solid var(--line);border-radius:10px}
+.boxh{display:flex;align-items:center;gap:8px;padding:10px 14px;border-bottom:1px solid var(--line);font-family:var(--f-mono);font-size:13px;color:var(--muted)}
+.boxb{padding:16px}
+svg text{font-family:var(--f-mono)}
+
+/* ---------- cover ---------- */
+.cover{display:grid;grid-template-columns:1.1fr 1fr;gap:40px;align-items:center;min-height:100%}
+.cover > *{min-width:0}
+.cover h1{font-size:clamp(44px,6.6vw,96px);line-height:.92;font-weight:800;letter-spacing:-.035em}
+.cover h1 em{font-style:normal;color:var(--red)}
+.cover .meta{display:flex;gap:18px;flex-wrap:wrap;margin-top:26px;font-family:var(--f-mono);font-size:13px;color:var(--muted)}
+.cover .meta span{display:flex;gap:6px;align-items:center}
+.dot{width:10px;height:10px;border-radius:50%;display:inline-block}
+.term{font-family:var(--f-mono);font-size:14px;line-height:1.8;padding:16px 18px;color:var(--muted)}
+.term .c{color:var(--accent)} .term .r{color:var(--red)} .term .a{color:var(--amber)}
+.hint{margin-top:28px;font-family:var(--f-mono);font-size:13px;color:var(--dim)}
+kbd{border:1px solid var(--line2);border-bottom-width:2px;border-radius:4px;padding:0 6px;font-family:var(--f-mono);font-size:12px;color:var(--muted)}
+
+/* ---------- stats ---------- */
+.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-top:26px}
+.stat{padding:18px}
+.stat .v{font-family:var(--f-display);font-size:clamp(34px,4vw,56px);font-weight:800;line-height:1;letter-spacing:-.02em}
+.stat .l{color:var(--muted);font-size:14px;margin-top:8px}
+.bars{display:grid;gap:10px}
+.bar{display:grid;grid-template-columns:150px 1fr 70px;gap:12px;align-items:center;font-size:14px}
+.bar .t{height:22px;background:var(--panel2);border-radius:4px;overflow:hidden}
+.bar .t i{display:block;height:100%;width:0;border-radius:4px;transition:width 1.1s cubic-bezier(.2,.8,.2,1)}
+.bar .n{font-family:var(--f-mono);font-size:13px;color:var(--muted);text-align:right;font-variant-numeric:tabular-nums}
+.src{font-family:var(--f-mono);font-size:11px;color:var(--dim);margin-top:12px}
+
+/* ---------- clinical forms ---------- */
+.forms{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-top:26px}
+.form{padding:16px;display:flex;flex-direction:column;gap:10px}
+.form svg{width:100%;height:auto;max-width:100%}
+.form p{margin:0;color:var(--muted);font-size:14px}
+.tag{font-family:var(--f-mono);font-size:11px;padding:2px 8px;border-radius:99px;align-self:flex-start;border:1px solid}
+.tag.red{color:var(--red);border-color:color-mix(in srgb,var(--red) 45%,transparent)}
+.tag.amb{color:var(--amber);border-color:color-mix(in srgb,var(--amber) 45%,transparent)}
+
+/* ---------- DTP ---------- */
+.dtp{display:grid;grid-template-columns:auto 1fr;gap:28px;align-items:center}
+.bottles{display:flex;gap:22px}
+.bottle{text-align:center;font-family:var(--f-mono);font-size:12px;color:var(--muted)}
+.bottle svg{width:84px;height:auto;display:block;margin:0 auto 6px}
+.bottle .res{font-size:13px;color:var(--fg);min-height:20px}
+.sl{display:grid;grid-template-columns:150px 1fr 56px;gap:12px;align-items:center;margin:10px 0;font-size:14px}
+.sl input{width:100%;accent-color:var(--accent)}
+.sl output{font-family:var(--f-mono);text-align:right;font-variant-numeric:tabular-nums}
+.verdict{margin-top:16px;padding:14px 16px;border-radius:8px;border:1px solid var(--line2);display:flex;gap:14px;align-items:center}
+.verdict .big{font-family:var(--f-display);font-size:30px;font-weight:800;font-variant-numeric:tabular-nums}
+.verdict.pos{border-color:color-mix(in srgb,var(--red) 50%,transparent);background:color-mix(in srgb,var(--red) 8%,transparent)}
+.verdict.pos .big{color:var(--red)}
+.verdict.neg{border-color:color-mix(in srgb,var(--accent) 45%,transparent);background:color-mix(in srgb,var(--accent) 7%,transparent)}
+.verdict.neg .big{color:var(--accent)}
+.rule{font-family:var(--f-mono);font-size:13px;color:var(--muted);line-height:1.9;margin:0;padding-left:18px}
+
+/* ---------- treatment ---------- */
+.chips{display:flex;gap:8px;flex-wrap:wrap;margin-top:22px}
+.chip{background:var(--panel);border:1px solid var(--line2);border-radius:99px;padding:8px 16px;cursor:pointer;font-style:italic}
+.chip:hover{border-color:var(--accent)}
+.chip.on{background:var(--fg);color:var(--bg);border-color:var(--fg)}
+.tx{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:16px}
+.tx > *{min-width:0}
+.decision{padding:22px;display:flex;flex-direction:column;gap:10px;justify-content:center}
+.decision .big{font-family:var(--f-display);font-size:clamp(30px,3.4vw,46px);font-weight:800;line-height:1}
+.decision.out .big{color:var(--red)} .decision.keep .big{color:var(--accent)}
+.decision p{margin:0;color:var(--muted)}
+.kv{display:grid;grid-template-columns:130px 1fr;gap:10px 14px;padding:18px;font-size:15px}
+.kv dt{font-family:var(--f-mono);font-size:12px;color:var(--dim);text-transform:uppercase;letter-spacing:.08em;padding-top:3px}
+.kv dd{margin:0}
+.always{margin-top:14px;padding:14px 18px;font-size:14px;color:var(--muted)}
+.always b{color:var(--red);font-family:var(--f-mono);font-size:12px;letter-spacing:.08em}
+
+/* ---------- issue ---------- */
+.ihead{display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin-top:6px}
+.state{display:inline-flex;gap:6px;align-items:center;border-radius:99px;padding:5px 12px;font-size:14px;font-weight:600}
+.state.open{background:#1f6f43;color:#e9fff1}
+.state.merged{background:#6e40c9;color:#f3ecff}
+.state.closed{background:#9b2c2c;color:#ffecec}
+.labels{display:flex;gap:6px;flex-wrap:wrap}
+.lab{font-size:12px;font-family:var(--f-mono);border-radius:99px;padding:2px 9px}
+.thread{display:grid;gap:14px;margin-top:22px;position:relative}
+.cm{display:grid;grid-template-columns:40px 1fr;gap:12px}
+.av{width:40px;height:40px;border-radius:50%;display:grid;place-items:center;font-family:var(--f-mono);font-weight:600;font-size:13px;color:var(--bg)}
+.cm .box{min-width:0}
+.vit{display:grid;grid-template-columns:repeat(6,1fr);gap:1px;background:var(--line);border-top:1px solid var(--line)}
+.vit div{background:var(--panel);padding:12px;text-align:center}
+.vit b{display:block;font-family:var(--f-display);font-size:24px;font-variant-numeric:tabular-nums}
+.vit span{font-family:var(--f-mono);font-size:11px;color:var(--muted)}
+.vit .hot b{color:var(--red)}
+.lab-tbl{width:100%;border-collapse:collapse;font-size:14px}
+.lab-tbl td{padding:6px 0;border-bottom:1px dashed var(--line)}
+.lab-tbl td:last-child{text-align:right;font-family:var(--f-mono);font-variant-numeric:tabular-nums}
+.lab-tbl .up{color:var(--red)}
+
+/* ---------- commit / gram ---------- */
+.clock{font-family:var(--f-display);font-size:64px;font-weight:800;font-variant-numeric:tabular-nums;line-height:1}
+.clock small{font-size:20px;color:var(--muted);font-weight:500}
+canvas{display:block;max-width:100%}
+.scope{border-radius:50%;overflow:hidden;aspect-ratio:1;width:min(100%,360px);margin:0 auto;box-shadow:0 0 0 10px #111a1d,0 0 0 11px var(--line2),0 30px 60px -20px #000}
+.scope canvas{width:100%;height:100%}
+
+/* ---------- PR ---------- */
+.opts{display:grid;gap:10px;margin-top:20px}
+.opt{display:grid;grid-template-columns:34px 1fr auto;gap:12px;align-items:center;text-align:left;background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:14px 16px;cursor:pointer;transition:border-color .2s,background .2s}
+.opt:hover{border-color:var(--line2);background:var(--panel2)}
+.opt .k{font-family:var(--f-mono);font-weight:600;width:30px;height:30px;border-radius:6px;display:grid;place-items:center;background:var(--panel2);border:1px solid var(--line2)}
+.opt .s{font-family:var(--f-mono);font-size:12px}
+.opt.good{border-color:var(--violet);background:color-mix(in srgb,var(--violet) 10%,var(--panel))}
+.opt.good .s{color:var(--violet)}
+.opt.bad{border-color:color-mix(in srgb,var(--red) 55%,transparent);opacity:.85}
+.opt.bad .s{color:var(--red)}
+.review{margin-top:16px}
+.review .boxb{display:grid;gap:8px}
+.review p{margin:0}
+.diff{font-family:var(--f-mono);font-size:14px;line-height:1.7;padding:12px 0;overflow-x:auto}
+.diff div{padding:0 16px;white-space:pre}
+.diff .add{background:color-mix(in srgb,var(--accent) 12%,transparent);color:#9ff0dc}
+.diff .del{background:color-mix(in srgb,var(--red) 12%,transparent);color:#ffb3b3}
+.reveal{margin-top:14px;background:none;border:1px dashed var(--line2);border-radius:8px;padding:8px 14px;cursor:pointer;font-family:var(--f-mono);font-size:13px;color:var(--muted)}
+
+/* ---------- chart ---------- */
+.chartwrap{overflow-x:auto;margin-top:18px}
+.chartwrap svg{min-width:640px;width:100%;height:auto}
+#tcurve{stroke-dasharray:1400;stroke-dashoffset:1400}
+.active #tcurve{animation:draw 2.4s .3s ease forwards}
+@keyframes draw{to{stroke-dashoffset:0}}
+
+/* ---------- release ---------- */
+.rel{display:grid;grid-template-columns:repeat(2,1fr);gap:12px;margin-top:22px}
+.ri{display:grid;grid-template-columns:28px 1fr;gap:12px;padding:16px}
+.ri svg{color:var(--accent)}
+.ri b{display:block;font-family:var(--f-display);font-size:18px;margin-bottom:2px}
+.ri span{color:var(--muted);font-size:14px}
+.refs{font-size:14px;color:var(--muted);line-height:1.8;padding-left:18px}
+
+/* ---------- commit graph ---------- */
+.graph{border-top:1px solid var(--line);background:var(--panel);padding-block:8px calc(8px + env(safe-area-inset-bottom,0px));padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));display:flex;align-items:center;gap:14px}
+.graph .lbl{font-family:var(--f-mono);font-size:12px;color:var(--muted);white-space:nowrap;min-width:0;overflow:hidden;text-overflow:ellipsis;max-width:40%}
+.graph .lbl b{color:var(--fg);font-weight:600}
+.graph svg{flex:1;height:34px;min-width:0}
+.graph circle{cursor:pointer}
+
+/* ---------- animations ---------- */
+.flow{animation:dash 1.2s linear infinite}
+@keyframes dash{to{stroke-dashoffset:-24}}
+.needle{transition:transform 1.2s cubic-bezier(.3,.7,.2,1) .3s;transform:translateY(-70px)}
+.active .needle{transform:none}
+.fadeup > *{animation:none}
+.active .fadeup > *{animation:fu .6s both}
+.active .fadeup > *:nth-child(2){animation-delay:.08s}
+.active .fadeup > *:nth-child(3){animation-delay:.16s}
+.active .fadeup > *:nth-child(4){animation-delay:.24s}
+.active .fadeup > *:nth-child(5){animation-delay:.32s}
+.active .fadeup > *:nth-child(6){animation-delay:.40s}
+@keyframes fu{from{transform:translateY(12px);opacity:.15}to{transform:none;opacity:1}}
+@media (prefers-reduced-motion:reduce){
+  *,*::before,*::after{animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important}
+  #tcurve{stroke-dashoffset:0}
+}
+
+/* ---------- responsive ---------- */
+@media (max-width:1000px){
+  .forms{grid-template-columns:repeat(2,1fr)}
+  .vit{grid-template-columns:repeat(3,1fr)}
+}
+@media (max-width:820px){
+  .main{grid-template-columns:1fr}
+  .tree{display:none}
+  .grid2,.cover,.tx,.dtp,.rel{grid-template-columns:1fr}
+  .stats{grid-template-columns:1fr}
+  .bar{grid-template-columns:110px 1fr 56px}
+  .sl{grid-template-columns:1fr 56px}
+  .sl label{grid-column:1/-1}
+  .repo .hide-s{display:none}
+  .kv{grid-template-columns:1fr}
+}
+@media (max-width:480px){
+  .forms{grid-template-columns:1fr}
+  .vit{grid-template-columns:repeat(2,1fr)}
+  .graph .lbl{display:none}
+}
+</style>
+
+<div class="app">
+  <header class="top">
+    <div class="repo">
+      <svg width="18" height="18" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><rect x="2" y="1.5" width="12" height="13" rx="2"/><path d="M5 1.5v13M7.5 5h4M7.5 8h4"/></svg>
+      <span>servicio-medicina-interna / <b>port-a-cath-infectado</b></span>
+      <span class="pill hide-s">Sesión clínica</span>
+      <span class="sp"></span>
+      <div class="ctl">
+        <button id="bPrev" aria-label="Diapositiva anterior">←</button>
+        <button id="bNext" aria-label="Diapositiva siguiente">→</button>
+        <button id="bFull" class="hide-s" aria-label="Pantalla completa">⛶</button>
+      </div>
+    </div>
+    <nav class="tabs" id="tabs" aria-label="Secciones">
+      <button data-go="cover">
+        <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M5 4 1 8l4 4M11 4l4 4-4 4"/></svg>Código</button>
+      <button data-go="anatomia">
+        <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2 2h12v12H2zM5 5h6M5 8h6M5 11h3"/></svg>README <span class="n">6</span></button>
+      <button data-go="issue">
+        <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="8" r="6.2"/><circle cx="8" cy="8" r="1.2" fill="currentColor"/></svg>Issues <span class="n">1</span></button>
+      <button data-go="pr1">
+        <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="4" cy="3.5" r="1.6"/><circle cx="4" cy="12.5" r="1.6"/><circle cx="12" cy="12.5" r="1.6"/><path d="M4 5v6M12 11V6a2 2 0 0 0-2-2H7"/></svg>Pull requests <span class="n">3</span></button>
+      <button data-go="release">
+        <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2 8V2h6l6 6-6 6z"/><circle cx="5" cy="5" r="1"/></svg>Releases</button>
+    </nav>
+  </header>
+
+  <div class="main">
+    <aside class="tree" id="tree" aria-label="Índice"></aside>
+
+    <main class="stage" id="stage">
+
+<!-- ================= 0 COVER ================= -->
+<section class="slide" id="cover" data-group="main" data-file="index.md" data-title="Portada">
+  <div class="inner cover">
+    <div>
+      <div class="eyebrow">Sesión clínica · Enfermedades infecciosas</div>
+      <h1 style="margin-top:16px">Cuando el reservorio <em>se infecta</em></h1>
+      <p class="lead">Infecciones asociadas a reservorio venoso subcutáneo (port-a-cath): de la patogenia al manejo, con un caso clínico que se resuelve en directo.</p>
+      <div class="meta">
+        <span><i class="dot" style="background:var(--accent)"></i>main · introducción</span>
+        <span><i class="dot" style="background:var(--amber)"></i>caso-clinico · issue #1</span>
+        <span><i class="dot" style="background:var(--violet)"></i>3 decisiones</span>
+      </div>
+      <div class="hint">Navega con <kbd>←</kbd> <kbd>→</kbd> · <kbd>F</kbd> pantalla completa</div>
+    </div>
+    <div class="box">
+      <div class="boxh"><i class="dot" style="background:var(--red)"></i><i class="dot" style="background:var(--amber)"></i><i class="dot" style="background:var(--accent)"></i>&nbsp; terminal</div>
+      <div class="term" id="termOut"></div>
+    </div>
+  </div>
+</section>
+
+<!-- ================= 1 ANATOMÍA ================= -->
+<section class="slide" id="anatomia" data-group="readme" data-file="01-anatomia.md" data-title="¿Qué es un port-a-cath?">
+  <div class="inner">
+    <div class="crumb">README.md › <b>01 · Anatomía del dispositivo</b></div>
+    <h2>Un catéter central totalmente implantado</h2>
+    <p class="lead">Cámara bajo la piel con un septo de silicona que se punciona con aguja Huber. El catéter llega a la cava superior. Sin nada expuesto, es el acceso venoso con menor tasa de infección.</p>
+    <div class="grid2">
+      <div class="box" style="padding:10px">
+        <svg viewBox="0 0 640 400" role="img" aria-label="Esquema del reservorio: piel, cámara, septo, aguja Huber y catéter hasta la vena cava superior">
+          <defs>
+            <linearGradient id="ti" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="#c7d3d6"/><stop offset="1" stop-color="#6d8086"/></linearGradient>
+            <linearGradient id="sk" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="#e7b49a"/><stop offset="1" stop-color="#c98f76"/></linearGradient>
+          </defs>
+          <rect x="0" y="92" width="640" height="26" fill="url(#sk)"/>
+          <rect x="0" y="118" width="640" height="150" fill="#f1d7a8" opacity=".16"/>
+          <text x="12" y="86" fill="var(--muted)" font-size="12">piel</text>
+          <text x="12" y="140" fill="var(--muted)" font-size="12">tejido subcutáneo · bolsillo</text>
+          <!-- vena -->
+          <rect x="510" y="150" width="56" height="240" rx="28" fill="#5a2c3c" opacity=".55"/>
+          <rect x="522" y="150" width="32" height="240" rx="16" fill="#7a3346" opacity=".7"/>
+          <!-- cámara -->
+          <path d="M190 170 h150 l14 70 a10 10 0 0 1 -10 12 h-158 a10 10 0 0 1 -10 -12 z" fill="url(#ti)"/>
+          <ellipse cx="265" cy="170" rx="72" ry="10" fill="#d7e3e5"/>
+          <rect x="205" y="160" width="120" height="16" rx="6" fill="#3b4a4f"/>
+          <rect x="215" y="180" width="100" height="44" rx="6" fill="#1b2a2f"/>
+          <!-- catéter -->
+          <path id="cath" d="M352 206 C 430 206, 470 200, 538 230 L 538 372" fill="none" stroke="#e9f2f0" stroke-width="12" stroke-linecap="round"/>
+          <path d="M352 206 C 430 206, 470 200, 538 230 L 538 372" fill="none" stroke="var(--red)" stroke-width="4" stroke-dasharray="6 6" class="flow"/>
+          <!-- aguja -->
+          <g class="needle">
+            <rect x="258" y="20" width="14" height="150" fill="#cfd9db"/>
+            <path d="M258 170 h14 l0 30 h-14 z" fill="#b9c5c8"/>
+            <rect x="238" y="10" width="54" height="22" rx="4" fill="var(--blue)"/>
+            <path d="M292 21 h60" stroke="var(--blue)" stroke-width="6" stroke-linecap="round"/>
+          </g>
+          <!-- etiquetas -->
+          <g font-size="13" fill="var(--fg)">
+            <line x1="340" y1="170" x2="410" y2="140" stroke="var(--line2)"/><text x="414" y="138">septo de silicona</text>
+            <line x1="200" y1="235" x2="120" y2="300" stroke="var(--line2)"/><text x="30" y="318">cámara (titanio / polímero)</text>
+            <line x1="292" y1="21" x2="360" y2="56" stroke="var(--line2)" opacity="0"/><text x="300" y="60">aguja Huber</text>
+            <line x1="450" y1="206" x2="440" y2="300" stroke="var(--line2)"/><text x="360" y="318">catéter</text>
+            <text x="500" y="392" fill="var(--muted)">vena cava superior →</text>
+          </g>
+        </svg>
+      </div>
+      <div class="fadeup" style="display:grid;gap:12px">
+        <div class="box boxb"><div class="eyebrow">Indicación</div><p style="margin:6px 0 0">Quimioterapia prolongada, nutrición parenteral, extracciones frecuentes, hemoderivados.</p></div>
+        <div class="box boxb"><div class="eyebrow">Duración</div><p style="margin:6px 0 0">Meses o años. A más tiempo y más accesos, más riesgo de infección intraluminal.</p></div>
+        <div class="box boxb"><div class="eyebrow">Puntos débiles</div><p style="margin:6px 0 0">Bolsillo subcutáneo, punto de punción del septo, conexiones y la luz del catéter (biofilm).</p></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ================= 2 EPIDEMIOLOGÍA ================= -->
+<section class="slide" id="epi" data-group="readme" data-file="02-epidemiologia.md" data-title="Epidemiología">
+  <div class="inner">
+    <div class="crumb">README.md › <b>02 · Epidemiología</b></div>
+    <h2>Poca incidencia, mucha morbilidad</h2>
+    <div class="grid2" style="align-items:start">
+      <div class="box">
+        <div class="boxh">bacteriemia por 1000 días-catéter, según dispositivo</div>
+        <div class="boxb bars" data-bars>
+          <div class="bar"><span>CVC no tunelizado</span><div class="t"><i data-w="100" style="background:var(--red)"></i></div><span class="n">2,7</span></div>
+          <div class="bar"><span>CVC tunelizado</span><div class="t"><i data-w="59" style="background:var(--amber)"></i></div><span class="n">1,6</span></div>
+          <div class="bar"><span>PICC</span><div class="t"><i data-w="41" style="background:var(--amber)"></i></div><span class="n">1,1</span></div>
+          <div class="bar"><span><b>Port-a-cath</b></span><div class="t"><i data-w="4" style="background:var(--accent)"></i></div><span class="n">0,1</span></div>
+          <div class="src">Maki DG et al. Mayo Clin Proc 2006;81:1159-71 (revisión sistemática, 200 estudios)</div>
+        </div>
+      </div>
+      <div class="box">
+        <div class="boxh">microbiología habitual (aprox., % de episodios)</div>
+        <div class="boxb bars" data-bars>
+          <div class="bar"><span><i>Staph.</i> coagulasa neg.</span><div class="t"><i data-w="88" style="background:var(--blue)"></i></div><span class="n">30–40</span></div>
+          <div class="bar"><span>Bacilos gram −</span><div class="t"><i data-w="63" style="background:var(--blue)"></i></div><span class="n">20–30</span></div>
+          <div class="bar"><span><i>S. aureus</i></span><div class="t"><i data-w="38" style="background:var(--red)"></i></div><span class="n">10–20</span></div>
+          <div class="bar"><span><i>Enterococcus</i></span><div class="t"><i data-w="19" style="background:var(--blue)"></i></div><span class="n">5–10</span></div>
+          <div class="bar"><span><i>Candida</i> spp.</span><div class="t"><i data-w="19" style="background:var(--red)"></i></div><span class="n">5–10</span></div>
+          <div class="src">Rangos orientativos de series en pacientes oncológicos; adaptar a la epidemiología local</div>
+        </div>
+      </div>
+    </div>
+    <div class="stats fadeup">
+      <div class="box stat"><div class="v" style="color:var(--accent)">×27</div><div class="l">menos bacteriemia que un CVC no tunelizado</div></div>
+      <div class="box stat"><div class="v" style="color:var(--amber)">Onco</div><div class="l">el paciente oncológico concentra la mayoría de los reservorios y de sus infecciones</div></div>
+      <div class="box stat"><div class="v" style="color:var(--red)">Retirada</div><div class="l">implica cirugía, retrasa la quimioterapia y obliga a buscar otro acceso</div></div>
+    </div>
+  </div>
+</section>
+
+<!-- ================= 3 PATOGENIA ================= -->
+<section class="slide" id="patogenia" data-group="readme" data-file="03-patogenia.md" data-title="Patogenia y biofilm">
+  <div class="inner">
+    <div class="crumb">README.md › <b>03 · Patogenia</b></div>
+    <h2>Dos rutas de entrada y un refugio: el biofilm</h2>
+    <div class="grid2">
+      <div class="box" style="padding:10px">
+        <svg viewBox="0 0 640 330" role="img" aria-label="Corte longitudinal del catéter con colonización extraluminal e intraluminal">
+          <rect x="0" y="0" width="640" height="60" fill="url(#sk)" opacity=".9"/>
+          <text x="12" y="36" fill="#4a2618" font-size="13" font-weight="600">piel · flora cutánea</text>
+          <!-- catheter -->
+          <rect x="70" y="150" width="560" height="100" rx="6" fill="#e9f2f0" opacity=".9"/>
+          <rect x="70" y="172" width="560" height="56" fill="#3a1d26"/>
+          <rect x="10" y="140" width="70" height="120" rx="8" fill="var(--blue)" opacity=".85"/>
+          <text x="18" y="282" fill="var(--muted)" font-size="12">conexión</text>
+          <path d="M100 60 L100 150" stroke="var(--line2)" stroke-width="2" stroke-dasharray="4 4"/>
+          <!-- paths -->
+          <path id="pExt" d="M100 62 L100 140 L620 140" fill="none"/>
+          <path id="pInt" d="M20 200 L620 200" fill="none"/>
+          <g id="dotsExt"></g><g id="dotsInt"></g>
+          <!-- biofilm patches -->
+          <g fill="var(--amber)" opacity=".55">
+            <ellipse cx="300" cy="146" rx="40" ry="7"/><ellipse cx="470" cy="146" rx="28" ry="6"/>
+          </g>
+          <g fill="var(--red)" opacity=".6">
+            <ellipse cx="260" cy="178" rx="46" ry="7"/><ellipse cx="430" cy="222" rx="54" ry="7"/><ellipse cx="560" cy="178" rx="30" ry="6"/>
+          </g>
+          <g font-size="13">
+            <text x="200" y="110" fill="var(--amber)">EXTRALUMINAL · piel / bolsillo / punción</text>
+            <text x="200" y="300" fill="var(--red)">INTRALUMINAL · conexiones, aguja, infusiones</text>
+          </g>
+        </svg>
+      </div>
+      <div style="display:grid;gap:12px">
+        <div class="box">
+          <div class="boxh">biofilm.sim · <span id="bfPhase" style="color:var(--accent)">adhesión</span></div>
+          <canvas id="biofilm" width="560" height="230" style="width:100%"></canvas>
+        </div>
+        <div class="box boxb" style="font-size:15px">
+          <b style="color:var(--amber)">Extraluminal</b>: domina en las primeras semanas tras la implantación.<br>
+          <b style="color:var(--red)">Intraluminal</b>: domina en dispositivos de larga duración como el port.<br>
+          <span style="color:var(--muted)">El biofilm protege a las bacterias frente a antibióticos y defensas. Por eso el sellado usa concentraciones 100-1000 veces superiores a la CMI.</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ================= 4 FORMAS CLÍNICAS ================= -->
+<section class="slide" id="formas" data-group="readme" data-file="04-formas-clinicas.md" data-title="Formas clínicas">
+  <div class="inner">
+    <div class="crumb">README.md › <b>04 · Formas clínicas</b></div>
+    <h2>Cuatro escenarios, cuatro pronósticos</h2>
+    <p class="lead">El punto de entrada local suele faltar. Muchas bacteriemias por port se presentan solo con fiebre, a veces con escalofríos tras usar el reservorio.</p>
+    <div class="forms fadeup">
+      <div class="box form">
+        <svg viewBox="0 0 200 110"><rect width="200" height="30" y="20" fill="var(--skin)" opacity=".85"/><circle cx="100" cy="35" r="10" fill="var(--red)" opacity=".7"/><rect x="70" y="60" width="60" height="26" rx="6" fill="var(--ti)"/></svg>
+        <h3>Punto de punción</h3>
+        <span class="tag amb">local · leve</span>
+        <p>Eritema o exudado &lt; 2 cm alrededor de la zona de punción del septo.</p>
+      </div>
+      <div class="box form">
+        <svg viewBox="0 0 200 110"><rect width="200" height="30" y="20" fill="var(--skin)" opacity=".85"/><ellipse cx="100" cy="72" rx="62" ry="30" fill="var(--red)" opacity=".45"/><rect x="70" y="60" width="60" height="26" rx="6" fill="var(--ti)"/></svg>
+        <h3>Bolsillo</h3>
+        <span class="tag red">retirada obligada</span>
+        <p>Pus, fluctuación o necrosis en la cavidad subcutánea que aloja la cámara.</p>
+      </div>
+      <div class="box form">
+        <svg viewBox="0 0 200 110"><rect width="200" height="30" y="20" fill="var(--skin)" opacity=".85"/><rect x="40" y="60" width="44" height="22" rx="5" fill="var(--ti)"/><path d="M84 71 H190" stroke="var(--red)" stroke-width="14" opacity=".45"/><path d="M84 71 H190" stroke="#e9f2f0" stroke-width="4"/></svg>
+        <h3>Túnel</h3>
+        <span class="tag red">retirada obligada</span>
+        <p>Eritema e induración &gt; 2 cm a lo largo del trayecto subcutáneo del catéter.</p>
+      </div>
+      <div class="box form">
+        <svg viewBox="0 0 200 110"><path d="M10 80 Q50 20 100 70 T190 50" fill="none" stroke="var(--red)" stroke-width="4"/><g fill="var(--red)"><circle cx="40" cy="50" r="5"/><circle cx="90" cy="62" r="5"/><circle cx="140" cy="62" r="5"/><circle cx="175" cy="52" r="5"/></g></svg>
+        <h3>Bacteriemia relacionada</h3>
+        <span class="tag red">sistémica</span>
+        <p>Hemocultivos positivos con el catéter como origen demostrado, sin otro foco.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ================= 5 DIAGNÓSTICO ================= -->
+<section class="slide" id="diag" data-group="readme" data-file="05-diagnostico.md" data-title="Diagnóstico: DTP">
+  <div class="inner">
+    <div class="crumb">README.md › <b>05 · Diagnóstico sin retirar el catéter</b></div>
+    <h2>Tiempo diferencial de positividad</h2>
+    <p class="lead">Se extraen a la vez hemocultivos por el reservorio y por vena periférica, con el mismo volumen. Si la muestra del reservorio crece al menos 2 horas antes, el catéter es el origen.</p>
+    <div class="grid2" style="align-items:start">
+      <div class="box boxb">
+        <div class="dtp">
+          <div class="bottles">
+            <div class="bottle"><svg viewBox="0 0 80 160" id="btlC"></svg>Reservorio<div class="res" id="resC"></div></div>
+            <div class="bottle"><svg viewBox="0 0 80 160" id="btlP"></svg>Periférica<div class="res" id="resP"></div></div>
+          </div>
+          <div>
+            <div class="sl"><label for="sC">Positivo reservorio</label><input id="sC" type="range" min="4" max="40" step="0.5" value="11"><output id="oC">11 h</output></div>
+            <div class="sl"><label for="sP">Positivo periférica</label><input id="sP" type="range" min="4" max="40" step="0.5" value="15"><output id="oP">15 h</output></div>
+            <div class="verdict" id="verd"><span class="big" id="vBig">4 h</span><span id="vTxt"></span></div>
+          </div>
+        </div>
+      </div>
+      <div class="box boxb">
+        <div class="eyebrow" style="margin-bottom:8px">Criterios de bacteriemia relacionada (IDSA 2009)</div>
+        <ul class="rule">
+          <li>DTP ≥ 2 h: reservorio positivo antes que periférica</li>
+          <li>Cultivos cuantitativos: reservorio ≥ 3 veces la periférica</li>
+          <li>Punta del catéter (si se retira): ≥ 15 UFC (semicuantitativo) o ≥ 10² UFC (cuantitativo) del mismo germen</li>
+        </ul>
+        <div class="eyebrow" style="margin:16px 0 8px">Trampas</div>
+        <ul class="rule">
+          <li>Volúmenes distintos en los frascos invalidan el DTP</li>
+          <li>Antibiótico previo puede retrasar ambos frascos</li>
+          <li>El DTP es menos fiable con <i>S. aureus</i> y <i>Candida</i></li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ================= 6 TRATAMIENTO ================= -->
+<section class="slide" id="tratamiento" data-group="readme" data-file="06-tratamiento.md" data-title="Tratamiento según germen">
+  <div class="inner">
+    <div class="crumb">README.md › <b>06 · ¿Retirar o salvar el reservorio?</b></div>
+    <h2>El germen decide</h2>
+    <div class="chips" id="chips"></div>
+    <div class="tx">
+      <div class="box decision" id="txDec"></div>
+      <dl class="box kv" id="txKv"></dl>
+    </div>
+    <div class="box always"><b>RETIRAR SIEMPRE, sea cual sea el germen, si hay</b><br>sepsis grave o shock · infección del bolsillo o del túnel · tromboflebitis supurada · endocarditis u osteomielitis · bacteriemia persistente &gt; 72 h con tratamiento adecuado</div>
+  </div>
+</section>
+
+<!-- ================= 7 ISSUE ================= -->
+<section class="slide" id="issue" data-group="caso" data-file="issues/1" data-title="Issue #1 · Presentación">
+  <div class="inner">
+    <div class="crumb">caso-clinico › issues › <b>#1</b></div>
+    <h2>Fiebre y escalofríos tras conectar el reservorio <span style="color:var(--dim);font-weight:500">#1</span></h2>
+    <div class="ihead">
+      <span class="state open"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="8" cy="8" r="6"/><circle cx="8" cy="8" r="1.3" fill="currentColor"/></svg>Abierto</span>
+      <div class="labels">
+        <span class="lab" style="background:#3d1d22;color:#ff9b9b">bacteriemia</span>
+        <span class="lab" style="background:#2a2440;color:#c8b6ff">oncología</span>
+        <span class="lab" style="background:#3b2f14;color:#f6cd7a">prioridad: alta</span>
+      </div>
+      <span style="color:var(--muted);font-size:14px">abierto por <b style="color:var(--fg)">hospital-de-dia</b> · caso ficticio de ejemplo</span>
+    </div>
+    <div class="thread fadeup">
+      <div class="cm"><div class="av" style="background:var(--violet)">HD</div>
+        <div class="box"><div class="boxh"><b style="color:var(--fg)">hospital-de-dia</b> comentó · día 0, 10:40</div>
+          <div class="boxb">Varón de <b>64 años</b>, adenocarcinoma de colon estadio IV, FOLFOX por port-a-cath implantado hace <b>8 meses</b>. A los 30 min de conectar el ciclo presenta <b>escalofríos intensos</b> y fiebre. Bolsillo sin eritema ni dolor. No tiene neutropenia (último hemograma hace 3 días: 6.100 neutrófilos).</div>
+          <div class="vit">
+            <div class="hot"><b>39,2</b><span>T ª C</span></div>
+            <div class="hot"><b>112</b><span>FC lpm</span></div>
+            <div><b>105/62</b><span>TA mmHg</span></div>
+            <div><b>20</b><span>FR rpm</span></div>
+            <div><b>96</b><span>SatO₂ %</span></div>
+            <div><b>15</b><span>Glasgow</span></div>
+          </div>
+        </div>
+      </div>
+      <div class="cm"><div class="av" style="background:var(--amber)">LB</div>
+        <div class="box"><div class="boxh"><b style="color:var(--fg)">laboratorio</b> comentó · día 0, 11:55</div>
+          <div class="boxb" style="display:grid;grid-template-columns:1fr 1fr;gap:0 28px">
+            <table class="lab-tbl"><tr><td>Leucocitos</td><td class="up">14.200 /µL</td></tr><tr><td>Neutrófilos</td><td class="up">88 %</td></tr><tr><td>Plaquetas</td><td>182.000 /µL</td></tr></table>
+            <table class="lab-tbl"><tr><td>PCR</td><td class="up">186 mg/L</td></tr><tr><td>Procalcitonina</td><td class="up">4,8 ng/mL</td></tr><tr><td>Lactato</td><td>2,1 mmol/L</td></tr></table>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ================= 8 COMMIT HEMOCULTIVOS ================= -->
+<section class="slide" id="commit" data-group="caso" data-file="commit a3f9c21" data-title="Commit · Hemocultivos">
+  <div class="inner">
+    <div class="crumb">caso-clinico › commits › <b class="mono">a3f9c21</b></div>
+    <h2>Hemocultivos simultáneos: reservorio y periférica</h2>
+    <div class="grid2">
+      <div class="box boxb">
+        <div style="display:flex;gap:30px;align-items:center;flex-wrap:wrap">
+          <div><div class="eyebrow">Tiempo en incubadora</div><div class="clock" id="clk">0<small> h</small></div></div>
+          <div class="bottles">
+            <div class="bottle"><svg viewBox="0 0 80 160" id="btlC2"></svg>Reservorio<div class="res" id="resC2"></div></div>
+            <div class="bottle"><svg viewBox="0 0 80 160" id="btlP2"></svg>Periférica<div class="res" id="resP2"></div></div>
+          </div>
+        </div>
+        <div class="verdict pos" id="verd2" style="visibility:hidden"><span class="big">DTP 4 h</span><span>≥ 2 h · <b>bacteriemia relacionada con el reservorio</b></span></div>
+        <button class="reveal" id="replay">↻ repetir incubación</button>
+      </div>
+      <div>
+        <div class="scope"><canvas id="gram" width="600" height="600"></canvas></div>
+        <p style="text-align:center;color:var(--muted);margin-top:16px;font-family:var(--f-mono);font-size:13px">Gram (día 1): <b style="color:var(--violet)">cocos grampositivos en racimos</b></p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ================= 9 PR 1 ================= -->
+<section class="slide" id="pr1" data-group="caso" data-file="pulls/2" data-title="PR #2 · Empírico">
+  <div class="inner">
+    <div class="crumb">caso-clinico › pull requests › <b>#2</b></div>
+    <h2>Tratamiento empírico con cocos gram+ en racimos</h2>
+    <p class="lead">El paciente está taquicárdico pero estable. ¿Qué tratamiento empírico iniciamos? Votad antes de abrir la revisión.</p>
+    <div class="pr" data-pr="pr1"></div>
+  </div>
+</section>
+
+<!-- ================= 10 PR 2 ================= -->
+<section class="slide" id="pr2" data-group="caso" data-file="pulls/3" data-title="PR #3 · ¿Salvar el port?">
+  <div class="inner">
+    <div class="crumb">caso-clinico › pull requests › <b>#3</b></div>
+    <h2>Identificación: <i>S. aureus</i> sensible a meticilina</h2>
+    <p class="lead">Día 2. El paciente necesita el reservorio para seguir con la quimioterapia. ¿Qué hacemos con el dispositivo?</p>
+    <div class="pr" data-pr="pr2"></div>
+  </div>
+</section>
+
+<!-- ================= 11 PR 3 ================= -->
+<section class="slide" id="pr3" data-group="caso" data-file="pulls/4" data-title="PR #4 · Duración">
+  <div class="inner">
+    <div class="crumb">caso-clinico › pull requests › <b>#4</b></div>
+    <h2>¿Cuánto tiempo tratamos?</h2>
+    <p class="lead">Port retirado el día 2. Hemocultivos de control (día 4) negativos. Afebril desde el día 4. Sin material protésico.</p>
+    <div class="pr" data-pr="pr3"></div>
+  </div>
+</section>
+
+<!-- ================= 12 EVOLUCIÓN ================= -->
+<section class="slide" id="evolucion" data-group="caso" data-file="git log --graph" data-title="Evolución">
+  <div class="inner">
+    <div class="crumb">caso-clinico › <b class="mono">git log --graph</b></div>
+    <h2>Evolución: del día 0 al alta</h2>
+    <div class="box chartwrap" style="padding:12px">
+      <svg viewBox="0 0 760 330" role="img" aria-label="Curva de temperatura de los días 0 a 18 con los eventos clave">
+        <g id="tgrid"></g>
+        <polyline id="tcurve" fill="none" stroke="var(--red)" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"/>
+        <g id="tev"></g>
+      </svg>
+    </div>
+    <p class="src">Línea discontinua: 38 °C. Rombos: commits del caso. Nuevo reservorio diferido hasta completar el tratamiento.</p>
+  </div>
+</section>
+
+<!-- ================= 13 RELEASE ================= -->
+<section class="slide" id="release" data-group="caso" data-file="releases/v1.0" data-title="Release v1.0 · Mensajes clave">
+  <div class="inner">
+    <div class="crumb">releases › <b class="mono">v1.0</b> · <span class="state merged" style="font-size:12px;padding:2px 10px">Latest</span></div>
+    <h2>Notas de la versión: lo que nos llevamos</h2>
+    <div class="rel fadeup">
+      <div class="box ri"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12l5 5 9-10"/></svg><div><b>Fiebre tras usar el port = hemocultivos pareados</b><span>Reservorio + periférica, mismo volumen, mismo momento.</span></div></div>
+      <div class="box ri"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12l5 5 9-10"/></svg><div><b>DTP ≥ 2 h confirma el origen</b><span>Sin necesidad de retirar el catéter para diagnosticar.</span></div></div>
+      <div class="box ri"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12l5 5 9-10"/></svg><div><b>S. aureus, Pseudomonas, Candida: fuera</b><span>El reservorio no se intenta salvar con estos gérmenes.</span></div></div>
+      <div class="box ri"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12l5 5 9-10"/></svg><div><b>Salvar = sistémico + sellado</b><span>Nunca sellado solo. Válido sobre todo para estafilococo coagulasa negativo.</span></div></div>
+      <div class="box ri"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12l5 5 9-10"/></svg><div><b>SASM: betalactámico, no vancomicina</b><span>Cloxacilina o cefazolina en cuanto llega el antibiograma.</span></div></div>
+      <div class="box ri"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12l5 5 9-10"/></svg><div><b>La duración se cuenta desde el primer cultivo negativo</b><span>Ecocardiograma y hemocultivos de control antes de decidir 14 días o 4-6 semanas.</span></div></div>
+    </div>
+  </div>
+</section>
+
+<!-- ================= 14 REFERENCIAS ================= -->
+<section class="slide" id="refs" data-group="caso" data-file="REFERENCES.md" data-title="Referencias y preguntas">
+  <div class="inner cover" style="grid-template-columns:1fr 1fr">
+    <div>
+      <div class="eyebrow">git commit -m "fin de la sesión"</div>
+      <h1 style="margin-top:16px">¿<em>Preguntas</em>?</h1>
+    </div>
+    <div class="box boxb">
+      <div class="eyebrow" style="margin-bottom:6px">REFERENCES.md</div>
+      <ol class="refs">
+        <li>Mermel LA et al. IDSA Clinical Practice Guidelines for the Diagnosis and Management of Intravascular Catheter-Related Infection. <i>Clin Infect Dis</i> 2009;49:1-45.</li>
+        <li>Chaves F et al. Diagnóstico y tratamiento de la bacteriemia asociada a catéter. Consenso SEIMC/SEMICYUC. <i>Enferm Infecc Microbiol Clin</i> 2018;36:112.e1-112.e19.</li>
+        <li>Maki DG, Kluger DM, Crnich CJ. The risk of bloodstream infection in adults with different intravascular devices. <i>Mayo Clin Proc</i> 2006;81:1159-71.</li>
+        <li>Liu C et al. IDSA Guidelines for the treatment of MRSA infections. <i>Clin Infect Dis</i> 2011;52:e18-55.</li>
+      </ol>
+    </div>
+  </div>
+</section>
+
+    </main>
+  </div>
+
+  <footer class="graph">
+    <div class="lbl" id="glbl"></div>
+    <svg id="gsvg" preserveAspectRatio="none" aria-label="Progreso de la sesión"></svg>
+  </footer>
+</div>
+
+<script>
+(() => {
+const $ = s => document.querySelector(s);
+const slides = [...document.querySelectorAll('.slide')];
+const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+let cur = 0;
+
+/* ---------- sidebar tree ---------- */
+const groups = {main:'raíz', readme:'README.md · introducción', caso:'rama caso-clinico'};
+const icons = {
+  main:'<svg class="ic" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 1.5h7l3 3v10H3z"/></svg>',
+  readme:'<svg class="ic" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 1.5h7l3 3v10H3zM5.5 8h5M5.5 11h5"/></svg>',
+  caso:'<svg class="ic" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="8" r="2.5"/><path d="M8 1v4.5M8 10.5V15"/></svg>'
+};
+const tree = $('#tree'); let lastG = null;
+slides.forEach((s, i) => {
+  const g = s.dataset.group;
+  if (g !== lastG) { const h = document.createElement('h4'); h.textContent = groups[g]; tree.appendChild(h); lastG = g; }
+  const b = document.createElement('button');
+  b.innerHTML = icons[g] + '<span>' + s.dataset.title + '</span>';
+  b.onclick = () => go(i);
+  tree.appendChild(b);
+});
+const treeBtns = [...tree.querySelectorAll('button')];
+
+/* ---------- commit graph ---------- */
+const gsvg = $('#gsvg');
+function drawGraph() {
+  const w = gsvg.clientWidth || 600, n = slides.length, pad = 12, step = (w - pad * 2) / (n - 1);
+  gsvg.setAttribute('viewBox', `0 0 ${w} 34`);
+  const firstCase = slides.findIndex(s => s.dataset.group === 'caso');
+  const y = i => i >= firstCase ? 23 : 11;
+  let h = `<path d="M${pad} 11 H${w - pad}" stroke="#4fd1b5" stroke-opacity=".35" stroke-width="2"/>`;
+  const bx = pad + step * (firstCase - 1);
+  h += `<path d="M${bx} 11 C ${bx + step / 2} 11, ${bx + step / 2} 23, ${bx + step} 23 H${w - pad}" fill="none" stroke="#f2b84b" stroke-opacity=".45" stroke-width="2"/>`;
+  slides.forEach((s, i) => {
+    const x = pad + step * i, on = i === cur, done = i < cur;
+    const col = i >= firstCase ? '#f2b84b' : '#4fd1b5';
+    h += `<circle data-i="${i}" cx="${x}" cy="${y(i)}" r="${on ? 7 : 5}" fill="${on || done ? col : '#0f181c'}" stroke="${col}" stroke-width="2"><title>${s.dataset.title}</title></circle>`;
+  });
+  gsvg.innerHTML = h;
+}
+gsvg.addEventListener('click', e => { const i = e.target.dataset && e.target.dataset.i; if (i != null) go(+i); });
+addEventListener('resize', drawGraph);
+
+/* ---------- tabs ---------- */
+const tabs = [...document.querySelectorAll('#tabs button')];
+tabs.forEach(t => t.onclick = () => go(slides.findIndex(s => s.id === t.dataset.go)));
+function tabFor(id) {
+  if (id === 'cover') return 'cover';
+  if (['issue','commit','evolucion'].includes(id)) return 'issue';
+  if (id.startsWith('pr')) return 'pr1';
+  if (['release','refs'].includes(id)) return 'release';
+  return 'anatomia';
+}
+
+/* ---------- navigation ---------- */
+const hooks = {};
+function go(n) {
+  n = Math.max(0, Math.min(slides.length - 1, n));
+  slides.forEach((s, i) => { s.classList.toggle('active', i === n); s.classList.toggle('prev', i < n); });
+  cur = n;
+  const s = slides[n];
+  treeBtns.forEach((b, i) => b.classList.toggle('on', i === n));
+  const tf = tabFor(s.id); tabs.forEach(t => t.classList.toggle('on', t.dataset.go === tf));
+  $('#glbl').innerHTML = `<b>${n + 1}/${slides.length}</b> · ${s.dataset.file}`;
+  drawGraph();
+  s.scrollTop = 0;
+  if (hooks[s.id]) hooks[s.id]();
+  try { history.replaceState(null, '', '#' + s.id); } catch (e) {}
+}
+$('#bPrev').onclick = () => go(cur - 1);
+$('#bNext').onclick = () => go(cur + 1);
+$('#bFull').onclick = () => { try { document.fullscreenElement ? document.exitFullscreen() : document.documentElement.requestFullscreen().catch(() => {}); } catch (e) {} };
+addEventListener('keydown', e => {
+  if (e.target.matches('input')) return;
+  if (['ArrowRight','PageDown',' '].includes(e.key)) { e.preventDefault(); go(cur + 1); }
+  else if (['ArrowLeft','PageUp'].includes(e.key)) { e.preventDefault(); go(cur - 1); }
+  else if (e.key === 'f' || e.key === 'F') $('#bFull').click();
+  else if (e.key === 'Home') go(0); else if (e.key === 'End') go(slides.length - 1);
+});
+
+/* ---------- cover terminal ---------- */
+const termLines = [
+  ['<span class="c">$</span> git clone sesion/port-a-cath-infectado', 0],
+  ['Clonando en "port-a-cath-infectado"... hecho.', 0],
+  ['<span class="c">$</span> git log --oneline', 0],
+  ['<span class="a">a3f9c21</span> hemocultivos: DTP 4 h', 0],
+  ['<span class="a">7be10d4</span> fiebre 39,2 °C tras conectar el port', 0],
+  ['<span class="a">0c11e2a</span> README: patogenia, diagnóstico, manejo', 0],
+  ['<span class="c">$</span> git status', 0],
+  ['<span class="r">issue #1 abierto</span> · 3 pull requests pendientes de revisión', 0],
+];
+let termTimer;
+hooks.cover = () => {
+  const out = $('#termOut'); clearTimeout(termTimer);
+  if (reduce) { out.innerHTML = termLines.map(l => l[0]).join('<br>'); return; }
+  out.innerHTML = ''; let i = 0;
+  const step = () => { if (i < termLines.length) { out.innerHTML += (i ? '<br>' : '') + termLines[i++][0]; termTimer = setTimeout(step, 380); } };
+  step();
+};
+$('#termOut').innerHTML = termLines.map(l => l[0]).join('<br>');
+
+/* ---------- bars ---------- */
+hooks.epi = () => {
+  document.querySelectorAll('#epi [data-w]').forEach(b => { b.style.width = '0'; });
+  requestAnimationFrame(() => setTimeout(() => document.querySelectorAll('#epi [data-w]').forEach(b => b.style.width = b.dataset.w + '%'), 60));
+};
+
+/* ---------- pathogenesis dots ---------- */
+function dots(gid, pid, color, n, dur) {
+  const g = document.getElementById(gid); let h = '';
+  for (let i = 0; i < n; i++) h += `<circle r="5" fill="${color}"><animateMotion dur="${dur}s" begin="${-(dur / n) * i}s" repeatCount="indefinite"><mpath href="#${pid}"/></animateMotion></circle>`;
+  g.innerHTML = h;
+}
+dots('dotsExt', 'pExt', '#f2b84b', 6, 6);
+dots('dotsInt', 'pInt', '#ff6b6b', 8, 5);
+
+/* ---------- biofilm canvas ---------- */
+const bf = $('#biofilm'), bx = bf.getContext('2d');
+let bfRun = false, bfT = 0, bugs = [], stuck = [];
+function bfReset() { bfT = 0; stuck = []; bugs = Array.from({length: 46}, () => ({x: Math.random() * 560, y: Math.random() * 150, vx: (Math.random() - .5) * 1.6, vy: Math.random() * .6 + .2, a: Math.random() * 6})); }
+function bfFrame() {
+  if (!bfRun) return;
+  bfT++;
+  const W = 560, H = 230, floor = 196;
+  bx.fillStyle = '#0f181c'; bx.fillRect(0, 0, W, H);
+  bx.fillStyle = '#2d4549'; bx.fillRect(0, floor, W, H - floor);
+  bx.fillStyle = '#8aa39d'; bx.font = '12px JetBrains Mono, monospace'; bx.fillText('superficie del catéter', 10, H - 12);
+  const phase = bfT < 160 ? 'adhesión' : bfT < 340 ? 'colonización' : bfT < 560 ? 'matriz extracelular' : 'dispersión';
+  $('#bfPhase').textContent = phase;
+  // matrix
+  if (bfT > 300) {
+    const m = Math.min(1, (bfT - 300) / 220);
+    stuck.forEach(s => { bx.fillStyle = `rgba(242,184,75,${.10 * m})`; bx.beginPath(); bx.arc(s.x, s.y, 22 * m + 4, 0, 7); bx.fill(); });
+  }
+  bugs.forEach(b => {
+    b.x += b.vx; b.y += b.vy; b.a += .05;
+    if (b.x < 0 || b.x > W) b.vx *= -1;
+    if (b.y > floor - 6) { stuck.push({x: b.x, y: floor - 5 - Math.random() * (bfT > 200 ? 26 : 4), a: b.a}); b.x = Math.random() * W; b.y = -10; }
+    drawBug(b.x, b.y, b.a, '#6cb6ff');
+  });
+  if (bfT > 200 && bfT % 4 === 0 && stuck.length < 260) { const p = stuck[Math.floor(Math.random() * stuck.length)]; if (p) stuck.push({x: p.x + (Math.random() - .5) * 18, y: Math.max(floor - 60, p.y - Math.random() * 8), a: Math.random() * 6}); }
+  stuck.forEach(s => drawBug(s.x, s.y, s.a, '#ff6b6b'));
+  if (bfT > 560) { if (bfT % 10 === 0 && stuck.length) { const s = stuck.pop(); bugs.push({x: s.x, y: s.y, vx: (Math.random() - .5) * 2, vy: -1.2, a: 0}); } bugs = bugs.filter(b => b.y > -20 || bugs.length < 46); }
+  if (bfT > 700) bfReset();
+  requestAnimationFrame(bfFrame);
+}
+function drawBug(x, y, a, c) { bx.save(); bx.translate(x, y); bx.rotate(a); bx.fillStyle = c; bx.beginPath(); bx.ellipse(0, 0, 6, 3.4, 0, 0, 7); bx.fill(); bx.restore(); }
+hooks.patogenia = () => { bfReset(); if (!bfRun) { bfRun = true; bfFrame(); } };
+
+/* ---------- bottles ---------- */
+function bottle(svgId) {
+  const s = document.getElementById(svgId);
+  s.innerHTML = `
+    <rect x="28" y="2" width="24" height="14" rx="3" fill="#a78bfa"/>
+    <rect x="32" y="16" width="16" height="16" fill="#cfd9db" opacity=".6"/>
+    <path d="M14 46 Q14 32 32 32 H48 Q66 32 66 46 V146 Q66 156 56 156 H24 Q14 156 14 146 Z" fill="#152227" stroke="#8aa39d" stroke-width="2"/>
+    <clipPath id="cl${svgId}"><path d="M15 47 Q15 33 32 33 H48 Q65 33 65 47 V146 Q65 155 56 155 H24 Q15 155 15 146 Z"/></clipPath>
+    <rect class="liq" clip-path="url(#cl${svgId})" x="14" y="80" width="52" height="80" fill="#e6c87a" opacity=".55" style="transition:fill .5s"/>
+    <circle class="sens" cx="40" cy="140" r="8" fill="#5f7772" style="transition:fill .5s"/>`;
+  return {
+    set(pos) { s.querySelector('.liq').setAttribute('fill', pos ? '#b5643c' : '#e6c87a'); s.querySelector('.sens').setAttribute('fill', pos ? '#ff6b6b' : '#5f7772'); }
+  };
+}
+const bC = bottle('btlC'), bP = bottle('btlP');
+function dtpUpdate() {
+  const c = +$('#sC').value, p = +$('#sP').value, d = p - c;
+  $('#oC').textContent = c + ' h'; $('#oP').textContent = p + ' h';
+  bC.set(true); bP.set(true);
+  $('#resC').textContent = '+ ' + c + ' h'; $('#resP').textContent = '+ ' + p + ' h';
+  const v = $('#verd'); const pos = d >= 2;
+  v.className = 'verdict ' + (pos ? 'pos' : 'neg');
+  $('#vBig').textContent = (d > 0 ? '+' : '') + d.toLocaleString('es-ES') + ' h';
+  $('#vTxt').innerHTML = pos ? 'DTP ≥ 2 h · <b>bacteriemia relacionada con catéter</b>' : 'DTP &lt; 2 h · el reservorio probablemente <b>no</b> es el origen';
+}
+$('#sC').oninput = dtpUpdate; $('#sP').oninput = dtpUpdate; dtpUpdate();
+
+/* ---------- commit animation ---------- */
+const bC2 = bottle('btlC2'), bP2 = bottle('btlP2');
+let clkRaf;
+function incubate() {
+  cancelAnimationFrame(clkRaf);
+  bC2.set(false); bP2.set(false); $('#resC2').textContent = ''; $('#resP2').textContent = ''; $('#verd2').style.visibility = 'hidden';
+  const T = 16, ms = reduce ? 1 : 4200, t0 = performance.now();
+  const tick = now => {
+    const t = Math.min(T, (now - t0) / ms * T);
+    $('#clk').innerHTML = Math.floor(t) + '<small> h</small>';
+    if (t >= 10) { bC2.set(true); $('#resC2').textContent = '+ 10 h'; }
+    if (t >= 14) { bP2.set(true); $('#resP2').textContent = '+ 14 h'; }
+    if (t < T) clkRaf = requestAnimationFrame(tick); else $('#verd2').style.visibility = 'visible';
+  };
+  clkRaf = requestAnimationFrame(tick);
+}
+$('#replay').onclick = incubate;
+
+/* ---------- gram stain ---------- */
+function drawGram() {
+  const c = $('#gram'), x = c.getContext('2d'), W = 600;
+  let seed = 7; const r = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+  const g = x.createRadialGradient(300, 300, 40, 300, 300, 320);
+  g.addColorStop(0, '#f6d6dc'); g.addColorStop(1, '#d99aa8'); x.fillStyle = g; x.fillRect(0, 0, W, W);
+  for (let i = 0; i < 40; i++) { x.fillStyle = 'rgba(214,120,150,.35)'; x.beginPath(); x.ellipse(r() * W, r() * W, 20 + r() * 26, 14 + r() * 18, r() * 3, 0, 7); x.fill(); }
+  for (let k = 0; k < 16; k++) {
+    const cx = 60 + r() * 480, cy = 60 + r() * 480, n = 10 + Math.floor(r() * 22);
+    for (let i = 0; i < n; i++) {
+      const a = r() * 6.28, d = Math.sqrt(r()) * 34, px = cx + Math.cos(a) * d, py = cy + Math.sin(a) * d;
+      const gr = x.createRadialGradient(px - 2, py - 2, 1, px, py, 8);
+      gr.addColorStop(0, '#7b4fc9'); gr.addColorStop(1, '#2b1360');
+      x.fillStyle = gr; x.beginPath(); x.arc(px, py, 7, 0, 7); x.fill();
+    }
+  }
+}
+hooks.commit = () => { drawGram(); incubate(); };
+drawGram();
+
+/* ---------- treatment by organism ---------- */
+const orgs = {
+  'S. coagulasa negativo': {keep: true, dec: 'Se puede intentar salvar', why: 'Baja virulencia. Si se retira el reservorio, basta un ciclo corto.',
+    kv: [['Sistémico', 'Vancomicina (o según antibiograma)'], ['Si se conserva', 'Sistémico 10–14 días + sellado antibiótico'], ['Si se retira', '5–7 días'], ['Sellado', 'Vancomicina 5 mg/mL ± heparina, 10–14 días']]},
+  'S. aureus': {keep: false, dec: 'Retirar siempre', why: 'Alto riesgo de complicaciones metastásicas y de endocarditis.',
+    kv: [['SASM', 'Cloxacilina o cefazolina'], ['SARM', 'Vancomicina o daptomicina'], ['Duración', '≥ 14 días si no complicada · 4–6 semanas si complicada'], ['Obligado', 'Ecocardiograma (ETE) y hemocultivos de control a las 48–72 h']]},
+  'Enterococcus': {keep: true, dec: 'Se puede intentar salvar', why: 'Opción de conservar con sellado si no hay criterios de retirada.',
+    kv: [['Sistémico', 'Ampicilina; vancomicina si resistente'], ['Si se conserva', 'Sistémico 7–14 días + sellado'], ['Si se retira', '7–14 días'], ['Valorar', 'Ecocardiograma si hay signos de endocarditis']]},
+  'Bacilos gram − (no Pseudomonas)': {keep: true, dec: 'Se puede intentar salvar', why: 'Si no hay sepsis grave y el germen es sensible.',
+    kv: [['Sistémico', 'Según antibiograma (ojo con BLEE)'], ['Si se conserva', '10–14 días + sellado'], ['Si se retira', '7–14 días'], ['Sellado', 'Gentamicina, ceftazidima o ciprofloxacino']]},
+  'Pseudomonas aeruginosa': {keep: false, dec: 'Retirar', why: 'Alta tasa de fracaso y recidiva si se conserva el dispositivo de larga duración.',
+    kv: [['Sistémico', 'Betalactámico antipseudomónico según antibiograma'], ['Duración', '7–14 días tras la retirada'], ['Control', 'Hemocultivos tras la retirada']]},
+  'Candida spp.': {keep: false, dec: 'Retirar', why: 'El biofilm fúngico no se erradica con tratamiento médico.',
+    kv: [['Sistémico', 'Equinocandina de inicio; desescalar a fluconazol si es sensible'], ['Duración', '14 días desde el primer hemocultivo negativo'], ['Obligado', 'Fondo de ojo; valorar ecocardiograma']]}
+};
+const chips = $('#chips');
+Object.keys(orgs).forEach((k, i) => {
+  const b = document.createElement('button'); b.className = 'chip' + (i === 1 ? ' on' : ''); b.textContent = k;
+  b.onclick = () => { chips.querySelectorAll('.chip').forEach(c => c.classList.remove('on')); b.classList.add('on'); showOrg(k); };
+  chips.appendChild(b);
+});
+function showOrg(k) {
+  const o = orgs[k], d = $('#txDec');
+  d.className = 'box decision ' + (o.keep ? 'keep' : 'out');
+  d.innerHTML = `<div class="eyebrow" style="color:var(--muted)">Reservorio</div><div class="big">${o.dec}</div><p>${o.why}</p>`;
+  $('#txKv').innerHTML = o.kv.map(([a, b]) => `<dt>${a}</dt><dd>${b}</dd>`).join('');
+}
+showOrg('S. aureus');
+
+/* ---------- pull requests ---------- */
+const prs = {
+  pr1: {title: 'Iniciar tratamiento empírico', opts: [
+      ['Ceftriaxona 2 g/24 h', false, 'No cubre SARM ni estafilococos coagulasa negativos resistentes a meticilina.'],
+      ['Vancomicina IV (± cobertura de gram − si sepsis o neutropenia)', true, 'Cocos en racimos con un catéter: cubrir SARM hasta tener identificación.'],
+      ['Esperar al antibiograma', false, 'Paciente con SRIS y bacteriemia: retrasar el antibiótico empeora el pronóstico.'],
+      ['Sellado con vancomicina sin tratamiento sistémico', false, 'El sellado nunca se usa solo en una bacteriemia.']],
+    diff: ['- paracetamol 1 g si fiebre', '+ vancomicina 15–20 mg/kg/8–12 h IV (ajustar por niveles)', '+ hemocultivos de control a las 48–72 h']},
+  pr2: {title: 'Decidir sobre el reservorio', opts: [
+      ['Conservar el port: cefazolina + sellado antibiótico', false, '<i>S. aureus</i> es indicación de retirada del dispositivo de larga duración.'],
+      ['Retirar el port y cambiar a cloxacilina o cefazolina', true, 'Retirada obligada. Para SASM, el betalactámico es superior a la vancomicina.'],
+      ['Recambio del catéter sobre guía', false, 'No aplica a un reservorio implantado, y no resuelve la infección en bacteriemia por <i>S. aureus</i>.']],
+    diff: ['- vancomicina IV', '+ cloxacilina 2 g/4 h IV (o cefazolina 2 g/8 h)', '+ retirada quirúrgica del reservorio · cultivo de la punta', '+ ecocardiograma transesofágico']},
+  pr3: {title: 'Fijar la duración', opts: [
+      ['7 días desde la retirada', false, 'Insuficiente para bacteriemia por <i>S. aureus</i>: más recidivas y complicaciones.'],
+      ['14 días desde el primer hemocultivo negativo, si el ETE es normal', true, 'Cumple criterios de bacteriemia no complicada: catéter retirado, ETE sin vegetaciones, sin prótesis, cultivos negativos y fiebre resuelta en 72 h.'],
+      ['6 semanas en todos los casos', false, 'Las 4–6 semanas se reservan para la bacteriemia complicada (endocarditis, metástasis sépticas, persistencia).']],
+    diff: ['+ ETE día 5: sin vegetaciones', '+ duración: 14 días desde HC negativos (día 2 → día 16)', '+ nuevo reservorio tras finalizar el tratamiento']}
+};
+document.querySelectorAll('.pr').forEach(el => {
+  const p = prs[el.dataset.pr];
+  el.innerHTML = `
+    <div class="ihead"><span class="state open" data-st>Abierto</span><span style="color:var(--muted);font-size:14px"><b style="color:var(--fg)">${p.title}</b> · caso-clinico ← propuesta</span></div>
+    <div class="opts">${p.opts.map((o, i) => `<button class="opt" data-i="${i}"><span class="k">${'ABCD'[i]}</span><span>${o[0]}</span><span class="s"></span></button>`).join('')}</div>
+    <button class="reveal" data-rv>Mostrar la respuesta correcta</button>
+    <div class="box review" hidden>
+      <div class="boxh">revisión de <b style="color:var(--fg)">&nbsp;infecciosas</b></div>
+      <div class="boxb"><p data-why></p></div>
+      <div class="diff">${p.diff.map(l => `<div class="${l[0] === '+' ? 'add' : 'del'}">${l}</div>`).join('')}</div>
+    </div>`;
+  const rev = el.querySelector('.review'), st = el.querySelector('[data-st]');
+  const pick = i => {
+    el.querySelectorAll('.opt').forEach((b, j) => {
+      const ok = p.opts[j][1];
+      b.classList.toggle('good', ok); b.classList.toggle('bad', j === i && !ok);
+      b.querySelector('.s').textContent = ok ? '✓ merged' : (j === i ? '✕ closed' : '');
+    });
+    const o = p.opts[i];
+    el.querySelector('[data-why]').innerHTML = (o[1] ? '<b style="color:var(--violet)">Aprobado.</b> ' : '<b style="color:var(--red)">Cambios solicitados.</b> ') + o[2] +
+      (o[1] ? '' : '<br><span style="color:var(--muted)">Opción correcta: ' + p.opts.find(x => x[1])[0] + '. ' + p.opts.find(x => x[1])[2] + '</span>');
+    rev.hidden = false;
+    st.className = 'state ' + (o[1] ? 'merged' : 'closed'); st.textContent = o[1] ? 'Fusionado' : 'Rechazado';
+  };
+  el.querySelectorAll('.opt').forEach(b => b.onclick = () => pick(+b.dataset.i));
+  el.querySelector('[data-rv]').onclick = () => pick(p.opts.findIndex(x => x[1]));
+});
+
+/* ---------- temperature chart ---------- */
+(() => {
+  const X = d => 60 + d * 37, Y = t => 270 - (t - 36) * 55;
+  let g = '';
+  for (let t = 36; t <= 40; t++) g += `<line x1="60" x2="726" y1="${Y(t)}" y2="${Y(t)}" stroke="#22343a"/><text x="50" y="${Y(t) + 4}" text-anchor="end" fill="#8aa39d" font-size="12">${t}°</text>`;
+  g += `<line x1="60" x2="726" y1="${Y(38)}" y2="${Y(38)}" stroke="#f2b84b" stroke-dasharray="5 5" opacity=".7"/>`;
+  for (let d = 0; d <= 18; d += 2) g += `<text x="${X(d)}" y="292" text-anchor="middle" fill="#8aa39d" font-size="12">d${d}</text>`;
+  g += `<text x="393" y="318" text-anchor="middle" fill="#5f7772" font-size="12">días desde el ingreso</text>`;
+  $('#tgrid').innerHTML = g;
+  const temps = [39.2, 38.9, 38.5, 37.9, 37.3, 36.9, 36.8, 36.7, 36.6, 36.7, 36.5, 36.6, 36.6, 36.5, 36.6, 36.5, 36.6, 36.5, 36.5];
+  $('#tcurve').setAttribute('points', temps.map((t, d) => X(d) + ',' + Y(t)).join(' '));
+  const ev = [[0, 'HC ×2', '#ff6b6b'], [1, 'Gram · vancomicina', '#a78bfa'], [2, 'SASM · retirada · cloxacilina', '#a78bfa'], [4, 'HC control −', '#4fd1b5'], [5, 'ETE normal', '#4fd1b5'], [16, 'fin de tratamiento', '#4fd1b5']];
+  let e = '';
+  ev.forEach(([d, l, c], i) => {
+    const ly = 22 + (i % 3) * 22;
+    e += `<line x1="${X(d)}" x2="${X(d)}" y1="${ly + 6}" y2="${Y(temps[d]) - 8}" stroke="${c}" stroke-opacity=".5" stroke-dasharray="2 3"/>`;
+    e += `<rect x="${X(d) - 6}" y="${Y(temps[d]) - 6}" width="12" height="12" transform="rotate(45 ${X(d)} ${Y(temps[d])})" fill="${c}"/>`;
+    e += `<text x="${X(d) + (d > 12 ? -6 : 6)}" y="${ly}" text-anchor="${d > 12 ? 'end' : 'start'}" fill="#dfe9e6" font-size="12">${l}</text>`;
+  });
+  $('#tev').innerHTML = e;
+})();
+hooks.evolucion = () => { const p = $('#tcurve'); p.style.animation = 'none'; p.getBoundingClientRect(); p.style.animation = ''; };
+
+/* ---------- start ---------- */
+const start = Math.max(0, slides.findIndex(s => '#' + s.id === location.hash));
+go(start);
+})();
+</script>
